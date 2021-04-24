@@ -12,9 +12,12 @@ using JT808.Protocol.Extensions;
 using JT808.Gateway.Client.Services;
 using JT808.Gateway.Client.Metadata;
 using Microsoft.Extensions.DependencyInjection;
+using JT808.Gateway.Client.Internal;
+using JT808.Protocol.Enums;
 
 namespace JT808.Gateway.Client
 {
+
     public class JT808TcpClient:IDisposable
     {
         private bool disposed = false;
@@ -23,28 +26,74 @@ namespace JT808.Gateway.Client
         private readonly JT808Serializer JT808Serializer;
         private readonly JT808SendAtomicCounterService SendAtomicCounterService;
         private readonly JT808ReceiveAtomicCounterService ReceiveAtomicCounterService;
+        private readonly JT808RetryBlockingCollection RetryBlockingCollection;
         private bool socketState = true;
         public JT808DeviceConfig DeviceConfig { get; }
+        private IJT808MessageProducer producer;
+        private Task heartbeatTask;
+        private CancellationTokenSource heartbeatCTS;
         public JT808TcpClient(
             JT808DeviceConfig deviceConfig,
             IServiceProvider serviceProvider)
         {
             DeviceConfig = deviceConfig;
+            WriteableTimeout = DateTime.UtcNow.AddSeconds(DeviceConfig.Heartbeat);
+            heartbeatCTS = new CancellationTokenSource();
             SendAtomicCounterService = serviceProvider.GetRequiredService<JT808SendAtomicCounterService>();
             ReceiveAtomicCounterService = serviceProvider.GetRequiredService<JT808ReceiveAtomicCounterService>();
             JT808Serializer = serviceProvider.GetRequiredService<IJT808Config>().GetSerializer();
-            Logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("JT808TcpClient");
+            Logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger<JT808TcpClient>();
+            producer = serviceProvider.GetRequiredService<IJT808MessageProducer>();
+            RetryBlockingCollection = serviceProvider.GetRequiredService<JT808RetryBlockingCollection>();
         }
-        public async ValueTask<bool> ConnectAsync(EndPoint remoteEndPoint)
+        public async ValueTask<bool> ConnectAsync()
         {
+            var remoteEndPoint = new IPEndPoint(IPAddress.Parse(DeviceConfig.TcpHost), DeviceConfig.TcpPort);
             clientSocket = new Socket(remoteEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             try
             {
+                if (!string.IsNullOrEmpty(DeviceConfig.LocalIPAddress))
+                {
+                    IPAddress localIPAddress = IPAddress.Parse(DeviceConfig.LocalIPAddress);
+                    clientSocket.Bind(new IPEndPoint(localIPAddress, DeviceConfig.LocalPort));
+                }
                 await clientSocket.ConnectAsync(remoteEndPoint);
+                await Task.Factory.StartNew(async()=> {
+                    while (!heartbeatCTS.IsCancellationRequested)
+                    {
+                        if (WriteableTimeout <= DateTime.UtcNow)
+                        {
+                            try
+                            {
+                                if (Logger.IsEnabled(LogLevel.Information))
+                                {
+                                    Logger.LogInformation($"{DeviceConfig.Heartbeat}s send heartbeat:{DeviceConfig.TerminalPhoneNo}-{DeviceConfig.Version.ToString()}");
+                                }
+                                if(DeviceConfig.Version== Protocol.Enums.JT808Version.JTT2013)
+                                {
+                                    var package = JT808.Protocol.Enums.JT808MsgId.终端心跳.Create(DeviceConfig.TerminalPhoneNo);
+                                    await SendAsync(new JT808ClientRequest(package));
+                                }
+                                else
+                                {
+                                    var package = JT808.Protocol.Enums.JT808MsgId.终端心跳.Create2019(DeviceConfig.TerminalPhoneNo);
+                                    await SendAsync(new JT808ClientRequest(package));
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.LogError(ex, "");
+                            }
+                        }
+                        await Task.Delay(TimeSpan.FromSeconds(DeviceConfig.Heartbeat));
+                    }
+                }, heartbeatCTS.Token);
                 return true;
             }
             catch (Exception e)
             {
+                Logger.LogError(e, "ConnectAsync Error");
+                RetryBlockingCollection.RetryBlockingCollection.Add(DeviceConfig);
                 return false;
             }
         }
@@ -61,6 +110,7 @@ namespace JT808.Gateway.Client
                 Task writing = FillPipeAsync(session, pipe.Writer, cancellationToken);
                 Task reading = ReadPipeAsync(session, pipe.Reader);
                 await Task.WhenAll(reading, writing);
+                RetryBlockingCollection.RetryBlockingCollection.Add(DeviceConfig);
             }, clientSocket);
         }
         private async Task FillPipeAsync(Socket session, PipeWriter writer, CancellationToken cancellationToken)
@@ -69,13 +119,18 @@ namespace JT808.Gateway.Client
             {
                 try
                 {
-                    Memory<byte> memory = writer.GetMemory(80960);
+                    Memory<byte> memory = writer.GetMemory(8096);
                     int bytesRead = await session.ReceiveAsync(memory, SocketFlags.None, cancellationToken);
                     if (bytesRead == 0)
                     {
                         break;
                     }
                     writer.Advance(bytesRead);
+                }
+                catch (OperationCanceledException ex)
+                {
+                    Logger.LogError($"[Receive Timeout]:{session.RemoteEndPoint}");
+                    break;
                 }
                 catch (System.Net.Sockets.SocketException ex)
                 {
@@ -146,10 +201,15 @@ namespace JT808.Gateway.Client
                     {
                         try
                         {
-                            var package = JT808Serializer.HeaderDeserialize(seqReader.Sequence.Slice(totalConsumed, seqReader.Consumed - totalConsumed).FirstSpan,minBufferSize:10240);
+                            var data = seqReader.Sequence.Slice(totalConsumed, seqReader.Consumed - totalConsumed).ToArray();
+                            var package = JT808Serializer.Deserialize(data, minBufferSize: 8096);
+                            if (producer != null)
+                            {
+                                producer.ProduceAsync(package);
+                            }
                             ReceiveAtomicCounterService.MsgSuccessIncrement();
                             if (Logger.IsEnabled(LogLevel.Debug)) Logger.LogDebug($"[Atomic Success Counter]:{ReceiveAtomicCounterService.MsgSuccessCount}");
-                            if (Logger.IsEnabled(LogLevel.Trace)) Logger.LogTrace($"[Accept Hex {session.RemoteEndPoint}]:{package.OriginalData.ToArray().ToHexString()}");
+                            if (Logger.IsEnabled(LogLevel.Trace)) Logger.LogTrace($"[Accept Hex {session.RemoteEndPoint}]:{data.ToHexString()}");
                         }
                         catch (JT808Exception ex)
                         {
@@ -176,9 +236,9 @@ namespace JT808.Gateway.Client
                 consumed = buffer.GetPosition(totalConsumed);
             }
         }
-        public async ValueTask SendAsync(JT808ClientRequest message)
+        public async ValueTask<bool> SendAsync(JT808ClientRequest message)
         {
-            if (disposed) return;
+            if (disposed) return false;
             if (IsOpen && socketState)
             {
                 if (message.Package != null)
@@ -186,59 +246,73 @@ namespace JT808.Gateway.Client
                     try
                     {
                         var sendData = JT808Serializer.Serialize(message.Package, minBufferSize: message.MinBufferSize);
-                        //clientSocket.Send(sendData);
                         await clientSocket.SendAsync(sendData, SocketFlags.None);
                         SendAtomicCounterService.MsgSuccessIncrement();
+                        WriteableTimeout = DateTime.UtcNow.AddSeconds(DeviceConfig.Heartbeat);
+                        return true;
                     }
                     catch (System.Net.Sockets.SocketException ex)
                     {
                         socketState = false;
                         Logger.LogError($"[{ex.SocketErrorCode.ToString()},{ex.Message},{DeviceConfig.TerminalPhoneNo}]");
+                        return false;
                     }
                     catch (System.Exception ex)
                     {
                         Logger.LogError(ex.Message);
+                        return false;
                     }
                 }
                 else if (message.HexData != null)
                 {
                     try
                     {
-                        clientSocket.Send(message.HexData);
+                        await clientSocket.SendAsync(message.HexData, SocketFlags.None);
                         SendAtomicCounterService.MsgSuccessIncrement();
+                        WriteableTimeout = DateTime.UtcNow.AddSeconds(DeviceConfig.Heartbeat);
+                        return true;
                     }
                     catch (System.Net.Sockets.SocketException ex)
                     {
                         socketState = false;
                         Logger.LogError($"[{ex.SocketErrorCode.ToString()},{ex.Message},{DeviceConfig.TerminalPhoneNo}]");
+                        return false;
                     }
                     catch (System.Exception ex)
                     {
                         Logger.LogError(ex.Message);
+                        return false;
                     }
                 }
             }
+            return false;
         }
-
         public void Close()
         {
             if (disposed) return;
-            var socket = clientSocket;
-            if (socket == null)
-                return;
-            if (Interlocked.CompareExchange(ref clientSocket, null, socket) == socket)
+            if (clientSocket == null) return;
+            try
             {
-                try
-                {
-                    clientSocket.Shutdown(SocketShutdown.Both);
-                }
-                finally
-                {
-                    clientSocket.Close();
-                }
+                clientSocket?.Shutdown(SocketShutdown.Both);
+                heartbeatShutdown();
             }
+            finally
+            {
+                clientSocket?.Close();
+            }          
         }
 
+        private void heartbeatShutdown()
+        {
+            try
+            {
+                heartbeatCTS.Cancel();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "");
+            }
+        }
         private void Dispose(bool disposing)
         {
             if (disposed) return;
@@ -246,9 +320,12 @@ namespace JT808.Gateway.Client
             {
                 // 清理托管资源
                 clientSocket.Dispose();
+                heartbeatCTS.Dispose();
             }
             disposed = true;
         }
+
+        public DateTime WriteableTimeout { get; private set; }
 
         ~JT808TcpClient()
         {

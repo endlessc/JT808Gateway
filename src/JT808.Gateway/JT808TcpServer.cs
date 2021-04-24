@@ -1,16 +1,12 @@
 ﻿using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.IO.Pipelines;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using JT808.Gateway.Abstractions;
-using JT808.Gateway.Abstractions.Enums;
-using JT808.Gateway.Configurations;
-using JT808.Gateway.Enums;
+using JT808.Gateway.Abstractions.Configurations;
 using JT808.Gateway.Services;
 using JT808.Gateway.Session;
 using JT808.Protocol;
@@ -22,6 +18,9 @@ using Microsoft.Extensions.Options;
 
 namespace JT808.Gateway
 {
+    /// <summary>
+    /// 808 tcp服务器
+    /// </summary>
     public class JT808TcpServer : IHostedService
     {
         private Socket server;
@@ -30,87 +29,72 @@ namespace JT808.Gateway
 
         private readonly JT808SessionManager SessionManager;
 
-        private readonly IJT808MsgProducer MsgProducer;
+        private readonly JT808BlacklistManager BlacklistManager;
 
         private readonly JT808Serializer Serializer;
 
-        private readonly JT808AtomicCounterService AtomicCounterService;
+        private readonly JT808MessageHandler MessageHandler;
 
-        private readonly JT808Configuration Configuration;
+        private readonly IJT808MsgProducer MsgProducer;
 
-        private readonly JT808NormalReplyMessageHandler  JT808NormalReplyMessageHandler;
+        private readonly IJT808MsgReplyLoggingProducer MsgReplyLoggingProducer;
 
-        private JT808UseType JT808UseType;
+        private readonly IOptionsMonitor<JT808Configuration> ConfigurationMonitor;
+
+        private long MessageReceiveCounter = 0;
 
         /// <summary>
-        /// 使用队列方式
+        /// 初始化服务注册
         /// </summary>
-        /// <param name="jT808ConfigurationAccessor"></param>
+        /// <param name="configurationMonitor"></param>
+        /// <param name="msgProducer"></param>
+        /// <param name="msgReplyLoggingProducer"></param>
+        /// <param name="messageHandler"></param>
         /// <param name="jT808Config"></param>
         /// <param name="loggerFactory"></param>
         /// <param name="jT808SessionManager"></param>
-        /// <param name="jT808MsgProducer"></param>
-        /// <param name="jT808AtomicCounterServiceFactory"></param>
+        /// <param name="jT808BlacklistManager"></param>
         public JT808TcpServer(
-                IOptions<JT808Configuration> jT808ConfigurationAccessor,
+                IOptionsMonitor<JT808Configuration> configurationMonitor,
+                IJT808MsgProducer msgProducer,
+                IJT808MsgReplyLoggingProducer msgReplyLoggingProducer,
+                JT808MessageHandler messageHandler,
                 IJT808Config jT808Config,
                 ILoggerFactory loggerFactory,
                 JT808SessionManager jT808SessionManager,
-                IJT808MsgProducer jT808MsgProducer,
-                JT808AtomicCounterServiceFactory jT808AtomicCounterServiceFactory)
+                JT808BlacklistManager jT808BlacklistManager)
         {
+            MessageHandler = messageHandler;
+            MsgProducer = msgProducer;
+            MsgReplyLoggingProducer = msgReplyLoggingProducer;
+            ConfigurationMonitor = configurationMonitor;
             SessionManager = jT808SessionManager;
-            Logger = loggerFactory.CreateLogger("JT808TcpServer");
+            BlacklistManager = jT808BlacklistManager;
+            Logger = loggerFactory.CreateLogger<JT808TcpServer>();
             Serializer = jT808Config.GetSerializer();
-            MsgProducer = jT808MsgProducer;
-            AtomicCounterService = jT808AtomicCounterServiceFactory.Create(JT808TransportProtocolType.tcp);
-            Configuration = jT808ConfigurationAccessor.Value;
-            JT808UseType = JT808UseType.Queue;
-            InitServer();
-        }
-        /// <summary>
-        /// 使用正常方式
-        /// </summary>
-        /// <param name="jT808ConfigurationAccessor"></param>
-        /// <param name="jT808Config"></param>
-        /// <param name="loggerFactory"></param>
-        /// <param name="jT808SessionManager"></param>
-        /// <param name="replyMessageHandler"></param>
-        /// <param name="jT808AtomicCounterServiceFactory"></param>
-        public JT808TcpServer(
-                IOptions<JT808Configuration> jT808ConfigurationAccessor,
-                IJT808Config jT808Config,
-                ILoggerFactory loggerFactory,
-                JT808SessionManager jT808SessionManager,
-                JT808NormalReplyMessageHandler replyMessageHandler,
-                JT808AtomicCounterServiceFactory jT808AtomicCounterServiceFactory)
-        {
-            SessionManager = jT808SessionManager;
-            Logger = loggerFactory.CreateLogger("JT808TcpServer");
-            Serializer = jT808Config.GetSerializer();
-            JT808NormalReplyMessageHandler = replyMessageHandler;
-            AtomicCounterService = jT808AtomicCounterServiceFactory.Create(JT808TransportProtocolType.tcp);
-            Configuration = jT808ConfigurationAccessor.Value;
-            JT808UseType = JT808UseType.Normal;
             InitServer();
         }
 
         private void InitServer()
         {
-            var IPEndPoint = new System.Net.IPEndPoint(IPAddress.Any, Configuration.TcpPort);
+            var IPEndPoint = new System.Net.IPEndPoint(IPAddress.Any, ConfigurationMonitor.CurrentValue.TcpPort);
             server = new Socket(IPEndPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.NoDelay, true);
             server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
-            server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReceiveBuffer, Configuration.MiniNumBufferSize);
-            server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.SendBuffer, Configuration.MiniNumBufferSize);
-            server.LingerState = new LingerOption(false, 0);
+            server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReceiveBuffer, ConfigurationMonitor.CurrentValue.MiniNumBufferSize);
+            server.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.SendBuffer, ConfigurationMonitor.CurrentValue.MiniNumBufferSize);
+            server.LingerState = new LingerOption(true, 0);
             server.Bind(IPEndPoint);
-            server.Listen(Configuration.SoBacklog);
+            server.Listen(ConfigurationMonitor.CurrentValue.SoBacklog);
         }
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            Logger.LogInformation($"JT808 TCP Server start at {IPAddress.Any}:{Configuration.TcpPort}.");
+            Logger.LogInformation($"JT808 TCP Server start at {IPAddress.Any}:{ConfigurationMonitor.CurrentValue.TcpPort}.");
             Task.Factory.StartNew(async () =>
             {
                 while (!cancellationToken.IsCancellationRequested)
@@ -141,7 +125,7 @@ namespace JT808.Gateway
             {
                 try
                 {
-                    Memory<byte> memory = writer.GetMemory(Configuration.MiniNumBufferSize);
+                    Memory<byte> memory = writer.GetMemory(ConfigurationMonitor.CurrentValue.MiniNumBufferSize);
                     //设备多久没发数据就断开连接 Receive Timeout.
                     int bytesRead = await session.Client.ReceiveAsync(memory, SocketFlags.None, session.ReceiveTimeout.Token);
                     if (bytesRead == 0)
@@ -149,29 +133,29 @@ namespace JT808.Gateway
                         break;
                     }
                     writer.Advance(bytesRead);
+                    FlushResult result = await writer.FlushAsync(session.ReceiveTimeout.Token);
+                    if (result.IsCompleted)
+                    {
+                        break;
+                    }
                 }
-                catch (OperationCanceledException ex)
+                catch (OperationCanceledException)
                 {
-                    Logger.LogError($"[Receive Timeout]:{session.Client.RemoteEndPoint}");
+                    Logger.LogError($"[Receive Timeout Or Operation Canceled]:{session.Client.RemoteEndPoint},{session.TerminalPhoneNo}");
                     break;
                 }
                 catch (System.Net.Sockets.SocketException ex)
                 {
-                    Logger.LogError($"[{ex.SocketErrorCode.ToString()},{ex.Message}]:{session.Client.RemoteEndPoint}");
+                    Logger.LogError($"[{ex.SocketErrorCode},{ex.Message}]:{session.Client.RemoteEndPoint},{session.TerminalPhoneNo}");
                     break;
                 }
 #pragma warning disable CA1031 // Do not catch general exception types
                 catch (Exception ex)
                 {
-                    Logger.LogError(ex, $"[Receive Error]:{session.Client.RemoteEndPoint}");
+                    Logger.LogError(ex, $"[Receive Error]:{session.Client.RemoteEndPoint},{session.TerminalPhoneNo}");
                     break;
                 }
 #pragma warning restore CA1031 // Do not catch general exception types
-                FlushResult result = await writer.FlushAsync();
-                if (result.IsCompleted)
-                {
-                    break;
-                }
             }
             writer.Complete();
         }
@@ -192,16 +176,14 @@ namespace JT808.Gateway
                     if (result.IsCanceled) break;
                     if (buffer.Length > 0)
                     {
-                        ReaderBuffer(ref buffer, session, out consumed, out examined);
+                        ReaderBuffer(ref buffer, session, out consumed);
                     }
                 }
-#pragma warning disable CA1031 // Do not catch general exception types
                 catch (Exception ex)
                 {
-                    Logger.LogError(ex, $"[ReadPipe Error]:{session.Client.RemoteEndPoint}");
+                    Logger.LogError(ex, $"[ReadPipe Error]:{session.Client.RemoteEndPoint},{session.TerminalPhoneNo}");
                     break;
                 }
-#pragma warning restore CA1031 // Do not catch general exception types
                 finally
                 {
                     reader.AdvanceTo(consumed, examined);
@@ -209,10 +191,8 @@ namespace JT808.Gateway
             }
             reader.Complete();
         }
-        private void ReaderBuffer(ref ReadOnlySequence<byte> buffer, JT808TcpSession session, out SequencePosition consumed, out SequencePosition examined)
+        private void ReaderBuffer(ref ReadOnlySequence<byte> buffer, JT808TcpSession session, out SequencePosition consumed)
         {
-            consumed = buffer.Start;
-            examined = buffer.End;
             SequenceReader<byte> seqReader = new SequenceReader<byte>(buffer);
             if (seqReader.TryPeek(out byte beginMark))
             {
@@ -226,40 +206,43 @@ namespace JT808.Gateway
                 {
                     if (mark == 1)
                     {
-                        ReadOnlySpan<byte> contentSpan = ReadOnlySpan<byte>.Empty;
+                        byte[] data = null;
                         try
                         {
-                            contentSpan = seqReader.Sequence.Slice(totalConsumed, seqReader.Consumed - totalConsumed).FirstSpan;
+                            data = seqReader.Sequence.Slice(totalConsumed, seqReader.Consumed - totalConsumed).ToArray();
                             //过滤掉不是808标准包（14）
                             //（头）1+（消息 ID ）2+（消息体属性）2+（终端手机号）6+（消息流水号）2+（检验码 ）1+（尾）1
-                            if (contentSpan.Length > 14)
+                            if (data != null && data.Length > 14)
                             {
-                                var package = Serializer.HeaderDeserialize(contentSpan, minBufferSize: 10240);
-                                AtomicCounterService.MsgSuccessIncrement();
-                                if (Logger.IsEnabled(LogLevel.Debug)) Logger.LogDebug($"[Atomic Success Counter]:{AtomicCounterService.MsgSuccessCount}");
-                                if (Logger.IsEnabled(LogLevel.Trace)) Logger.LogTrace($"[Accept Hex {session.Client.RemoteEndPoint}]:{package.OriginalData.ToArray().ToHexString()}");
+                                var package = Serializer.HeaderDeserialize(data);
+                                if (BlacklistManager.Contains(package.Header.TerminalPhoneNo))
+                                {
+                                    if (Logger.IsEnabled(LogLevel.Warning))
+                                        Logger.LogWarning($"[Blacklist {session.Client.RemoteEndPoint}-{session.TerminalPhoneNo}]:{package.OriginalData.ToHexString()}");
+                                    session.ReceiveTimeout.Cancel();
+                                    break;
+                                }
+# if DEBUG
+                                Interlocked.Increment(ref MessageReceiveCounter);
+                                if (Logger.IsEnabled(LogLevel.Trace))
+                                    Logger.LogTrace($"[Accept Hex {session.Client.RemoteEndPoint}-{session.TerminalPhoneNo}]:{package.OriginalData.ToHexString()},Counter:{MessageReceiveCounter}");
+#else
+                                if (Logger.IsEnabled(LogLevel.Trace))
+                                    Logger.LogTrace($"[Accept Hex {session.Client.RemoteEndPoint}-{session.TerminalPhoneNo}]:{package.OriginalData.ToHexString()}");
+#endif
                                 SessionManager.TryLink(package.Header.TerminalPhoneNo, session);
-                                if(JT808UseType== JT808UseType.Normal)
-                                {
-                                    JT808NormalReplyMessageHandler.Processor(package, session);
-                                }
-                                else if(JT808UseType== JT808UseType.Queue)
-                                {
-                                    MsgProducer.ProduceAsync(package.Header.TerminalPhoneNo, package.OriginalData.ToArray());
-                                }
+                                Processor(session, package);
                             }
                         }
                         catch (NotImplementedException ex)
                         {
-                            Logger.LogError(ex.Message);
+                            Logger.LogError(ex.Message, $"[ReaderBuffer]:{data?.ToHexString()},{session.Client.RemoteEndPoint},{session.TerminalPhoneNo}");
                         }
                         catch (JT808Exception ex)
                         {
-                            AtomicCounterService.MsgFailIncrement();
-                            if (Logger.IsEnabled(LogLevel.Information)) Logger.LogInformation($"[Atomic Fail Counter]:{AtomicCounterService.MsgFailCount}");
-                            Logger.LogError($"[HeaderDeserialize ErrorCode]:{ ex.ErrorCode},[ReaderBuffer]:{contentSpan.ToArray().ToHexString()}");
+                            Logger.LogError($"[HeaderDeserialize ErrorCode]:{ ex.ErrorCode},[ReaderBuffer]:{data?.ToHexString()},{session.Client.RemoteEndPoint},{session.TerminalPhoneNo}");
                         }
-                        totalConsumed += (seqReader.Consumed - totalConsumed);
+                        totalConsumed += seqReader.Consumed - totalConsumed;
                         if (seqReader.End) break;
                         seqReader.Advance(1);
                         mark = 0;
@@ -273,16 +256,50 @@ namespace JT808.Gateway
             }
             if (seqReader.Length == totalConsumed)
             {
-                examined = consumed = buffer.End;
+                consumed = buffer.End;
             }
             else
             {
                 consumed = buffer.GetPosition(totalConsumed);
             }
         }
+        private void Processor(in IJT808Session session, in JT808HeaderPackage package)
+        {
+            try
+            {
+                MsgProducer?.ProduceAsync(package.Header.TerminalPhoneNo, package.OriginalData);
+                var downData = MessageHandler.Processor(in package);
+                if (ConfigurationMonitor.CurrentValue.IgnoreMsgIdReply != null && ConfigurationMonitor.CurrentValue.IgnoreMsgIdReply.Count > 0)
+                {
+                    if (!ConfigurationMonitor.CurrentValue.IgnoreMsgIdReply.Contains(package.Header.MsgId))
+                    {
+                        session.SendAsync(downData);
+                    }
+                }
+                else
+                {
+                    session.SendAsync(downData);
+                }
+                if (MsgReplyLoggingProducer != null)
+                {
+                    if (downData != null)
+                        MsgReplyLoggingProducer.ProduceAsync(package.Header.TerminalPhoneNo, downData);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, $"[Processor]:{package.OriginalData.ToHexString()},{session.Client.RemoteEndPoint},{session.TerminalPhoneNo}");
+            }
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
         public Task StopAsync(CancellationToken cancellationToken)
         {
-            Logger.LogInformation("808 Tcp Server Stop");
+            Logger.LogInformation("JT808 Tcp Server Stop");
             if (server?.Connected ?? false)
                 server.Shutdown(SocketShutdown.Both);
             server?.Close();

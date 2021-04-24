@@ -17,7 +17,7 @@ namespace JT808.Gateway.Kafka
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="serviceDescriptors"></param>
+        /// <param name="jT808ClientBuilder"></param>
         /// <param name="configuration">GetSection("JT808MsgConsumerConfig")</param>
         /// <returns></returns>
         public static IJT808ClientBuilder AddMsgConsumer(this IJT808ClientBuilder jT808ClientBuilder, IConfiguration configuration)
@@ -29,7 +29,7 @@ namespace JT808.Gateway.Kafka
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="serviceDescriptors"></param>
+        /// <param name="jT808ClientBuilder"></param>
         /// <param name="configuration">GetSection("JT808MsgReplyProducerConfig")</param>
         /// <returns></returns>
         public static IJT808ClientBuilder AddMsgReplyProducer(this IJT808ClientBuilder jT808ClientBuilder, IConfiguration configuration)
@@ -41,19 +41,31 @@ namespace JT808.Gateway.Kafka
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="jT808NettyBuilder"></param>
+        /// <param name="jT808ClientBuilder"></param>
         /// <param name="configuration">GetSection("JT808MsgReplyConsumerConfig")</param>
         /// <returns></returns>
         public static IJT808ClientBuilder AddMsgReplyConsumer(this IJT808ClientBuilder jT808ClientBuilder, IConfiguration configuration)
         {
             jT808ClientBuilder.JT808Builder.Services.Configure<JT808MsgReplyConsumerConfig>(configuration.GetSection("JT808MsgReplyConsumerConfig"));
-            jT808ClientBuilder.JT808Builder.Services.TryAddSingleton<IJT808MsgReplyConsumer, JT808MsgReplyConsumer>();
+            jT808ClientBuilder.JT808Builder.Services.Replace(new ServiceDescriptor(typeof(IJT808MsgReplyConsumer), typeof(JT808MsgReplyConsumer), ServiceLifetime.Singleton));
             return jT808ClientBuilder;
         }
         /// <summary>
         /// 
         /// </summary>
-        /// <param name="serviceDescriptors"></param>
+        /// <param name="jT808ClientBuilder"></param>
+        /// <param name="configuration">GetSection("JT808MsgReplyLoggingConsumerConfig")</param>
+        /// <returns></returns>
+        public static IJT808ClientBuilder AddMsgReplyLoggingConsumer(this IJT808ClientBuilder jT808ClientBuilder, IConfiguration configuration)
+        {
+            jT808ClientBuilder.JT808Builder.Services.Configure<JT808MsgReplyLoggingConsumerConfig>(configuration.GetSection("JT808MsgReplyLoggingConsumerConfig"));
+            jT808ClientBuilder.JT808Builder.Services.TryAddSingleton<IJT808MsgReplyLoggingConsumer, JT808MsgReplyLoggingConsumer>();
+            return jT808ClientBuilder;
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="jT808ClientBuilder"></param>
         /// <param name="configuration">GetSection("JT808SessionConsumerConfig")</param>
         /// <returns></returns>
         public static IJT808ClientBuilder AddSessionConsumer(this IJT808ClientBuilder jT808ClientBuilder, IConfiguration configuration)

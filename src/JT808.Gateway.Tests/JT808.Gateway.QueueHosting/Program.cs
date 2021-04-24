@@ -9,12 +9,14 @@ using NLog.Extensions.Logging;
 using JT808.Gateway.MsgLogging;
 using JT808.Gateway.ReplyMessage;
 using JT808.Gateway.Transmit;
-using JT808.Gateway.Traffic;
 using JT808.Gateway.Abstractions;
 using JT808.Gateway.SessionNotice;
 using JT808.Gateway.Client;
 using JT808.Gateway.QueueHosting.Jobs;
 using JT808.Gateway.Kafka;
+using JT808.Gateway.WebApiClientTool;
+using JT808.Gateway.QueueHosting.Impl;
+using JT808.Gateway.MsgIdHandler;
 
 namespace JT808.Gateway.QueueHosting
 {
@@ -41,35 +43,38 @@ namespace JT808.Gateway.QueueHosting
                     services.AddSingleton<ILoggerFactory, LoggerFactory>();
                     services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
                     services.AddJT808Configure()
-                            //.AddQueueGateway(options =>
-                            //{
-                            //    options.TcpPort = 808;
-                            //    options.UdpPort = 808;
-                            //})
-                            .AddQueueGateway(hostContext.Configuration)
+                            //添加客户端工具
+                            .AddClient()
+                            .AddClientReport()
+                            .Builder()
+                            //方式1:客户端webapi调用
+                            .AddWebApiClientTool(hostContext.Configuration)
+                            //添加客户端服务
+                            .AddClientKafka()
+                            .AddMsgConsumer(hostContext.Configuration)
+                            //添加消息上行处理器
+                            .AddMsgIdHandler<JT808UpMessageHandlerImpl>()
+                            //添加消息应答生产者
+                            .AddMsgReplyProducer(hostContext.Configuration)
+                            //添加消息应答服务并实现消息应答处理
+                            .AddReplyMessage<JT808DownMessageHandlerImpl>()
+                            .Builder()
+                            //添加消息应答处理
+                            .AddGateway(hostContext.Configuration)
+                            .AddMessageHandler<JT808CustomMessageHandlerImpl>()
                             .AddServerKafkaMsgProducer(hostContext.Configuration)
                             .AddServerKafkaSessionProducer(hostContext.Configuration)
                             .AddServerKafkaMsgReplyConsumer(hostContext.Configuration)
                             .AddTcp()
                             .AddUdp()
-                            .AddGrpc()
-                            .Builder()
-                            //添加客户端工具
-                            .AddClient()
-                            //添加客户端服务
-                            .AddClientKafka()
-                            .AddMsgConsumer(hostContext.Configuration)
-                            //添加消息应答服务 
-                            .AddMsgReplyProducer(hostContext.Configuration)
-                            //添加消息应答处理
-                            .AddReplyMessage()
-                            ;
-                    //grpc客户端调用
-                    //services.AddHostedService<CallGrpcClientJob>();
+                            .AddHttp();
+                    //方式2:客户端webapi调用
+                    //services.AddJT808WebApiClientTool(hostContext.Configuration);
+                    //httpclient客户端调用
+                    services.AddHostedService<CallHttpClientJob>();
                     //客户端测试
                     services.AddHostedService<UpJob>();
                 });
-
             await serverHostBuilder.RunConsoleAsync();
         }
     }

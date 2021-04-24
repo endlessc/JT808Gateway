@@ -57,8 +57,9 @@ namespace JT808.Gateway.SimpleQueueNotification
             services.Configure<AuthOptions>(Configuration.GetSection("AuthOptions"));
             services.AddJT808Configure()
                     .AddClientKafka()
-                    .AddMsgConsumer(Configuration)
-                    .AddMsgIdHandler<JT808MsgIdHandlerImpl>();
+                    .AddMsgConsumer(Configuration);
+                    //todo:JT808MsgIdHandlerImpl
+                    //.AddMsgIdHandler<JT808MsgIdHandlerImpl>();
         }
 
 
@@ -67,6 +68,7 @@ namespace JT808.Gateway.SimpleQueueNotification
         {
             app.UseDefaultFiles();
             app.UseStaticFiles();
+            app.UseFileServer();
             app.UseRouting();
             app.UseJT808JwtVerify();
             app.UseCors("CorsPolicy");

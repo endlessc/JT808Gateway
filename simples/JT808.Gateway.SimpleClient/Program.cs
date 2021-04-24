@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using JT808.Gateway.Client;
 using JT808.Gateway.SimpleClient.Services;
 using JT808.Gateway.SimpleClient.Jobs;
+using JT808.Gateway.WebApiClientTool;
 
 namespace JT808.Gateway.SimpleClient
 {
@@ -28,10 +29,13 @@ namespace JT808.Gateway.SimpleClient
                 services.AddSingleton<ILoggerFactory, LoggerFactory>();
                 services.AddSingleton(typeof(ILogger<>), typeof(Logger<>));
                 services.AddJT808Configure()
-                        .AddClient();
+                        .AddClient()
+                        .Builder()
+                        .AddWebApiClientTool(new Uri("http://127.0.0.1:828/"), "123456")
+                        ;
                 services.AddHostedService<UpService>();
                 services.AddHostedService<Up2019Service>();
-                services.AddHostedService<CallGrpcClientJob>();
+                services.AddHostedService<CallHttpClientJob>();
             });
             await serverHostBuilder.RunConsoleAsync();
         }

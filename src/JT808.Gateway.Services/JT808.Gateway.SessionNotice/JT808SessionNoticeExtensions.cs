@@ -10,7 +10,7 @@ namespace JT808.Gateway.SessionNotice
     public static class JT808SessionNoticeExtensions
     {
         /// <summary>
-        /// 会话通知服务（不同的消费者实例）
+        /// 会话通知服务
         /// </summary>
         /// <param name="jT808ClientBuilder"></param>
         /// <returns></returns>
@@ -22,7 +22,7 @@ namespace JT808.Gateway.SessionNotice
         }
 
         /// <summary>
-        /// 消息会话通知服务（不同的消费者实例）
+        /// 消息会话通知服务
         /// </summary>
         /// <typeparam name="TSessionNoticeService">自定义会话通知服务</typeparam>
         /// <param name="jT808ClientBuilder"></param>
@@ -36,24 +36,24 @@ namespace JT808.Gateway.SessionNotice
         }
 
         /// <summary>
-        /// 会话通知服务（不同的消费者实例）
+        /// 会话通知服务
         /// </summary>
-        /// <param name="jT808NormalGatewayBuilder"></param>
+        /// <param name="jT808GatewayBuilder"></param>
         /// <returns></returns>
-        public static IJT808NormalGatewayBuilder AddSessionNotice(this IJT808NormalGatewayBuilder  jT808NormalGatewayBuilder)
+        public static IJT808GatewayBuilder AddSessionNotice(this IJT808GatewayBuilder jT808GatewayBuilder)
         {
-            jT808NormalGatewayBuilder.JT808Builder.Services.AddSingleton<JT808SessionNoticeService>();
-            jT808NormalGatewayBuilder.JT808Builder.Services.AddHostedService<JT808SessionNoticeHostedService>();
-            return jT808NormalGatewayBuilder;
+            jT808GatewayBuilder.JT808Builder.Services.AddSingleton<JT808SessionNoticeService>();
+            jT808GatewayBuilder.JT808Builder.Services.AddHostedService<JT808SessionNoticeHostedService>();
+            return jT808GatewayBuilder;
         }
 
         /// <summary>
-        /// 消息会话通知服务（不同的消费者实例）
+        /// 消息会话通知服务
         /// </summary>
         /// <typeparam name="TSessionNoticeService">自定义会话通知服务</typeparam>
         /// <param name="jT808NormalGatewayBuilder"></param>
         /// <returns></returns>
-        public static IJT808NormalGatewayBuilder AddSessionNotice<TSessionNoticeService>(this IJT808NormalGatewayBuilder jT808NormalGatewayBuilder)
+        public static IJT808GatewayBuilder AddSessionNotice<TSessionNoticeService>(this IJT808GatewayBuilder jT808NormalGatewayBuilder)
            where TSessionNoticeService : JT808SessionNoticeService
         {
             jT808NormalGatewayBuilder.JT808Builder.Services.AddSingleton<JT808SessionNoticeService, TSessionNoticeService>();

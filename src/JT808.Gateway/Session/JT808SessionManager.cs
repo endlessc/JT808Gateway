@@ -18,27 +18,43 @@ namespace JT808.Gateway.Session
     public class JT808SessionManager
     {
         private readonly ILogger logger;
-        private readonly IJT808SessionProducer JT808SessionProducer;
+        private readonly IJT808SessionProducer SessionProducer;
+        /// <summary>
+        /// socket连接会话
+        /// </summary>
         public ConcurrentDictionary<string, IJT808Session> Sessions { get; }
+        /// <summary>
+        /// socket绑定的终端SIM连接会话
+        /// </summary>
         public ConcurrentDictionary<string, IJT808Session> TerminalPhoneNoSessions { get; }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="jT808SessionProducer"></param>
+        /// <param name="loggerFactory"></param>
         public JT808SessionManager(
             IJT808SessionProducer jT808SessionProducer,
             ILoggerFactory loggerFactory
             )
         {
-            JT808SessionProducer = jT808SessionProducer;
+            SessionProducer = jT808SessionProducer;
             Sessions = new ConcurrentDictionary<string, IJT808Session>(StringComparer.OrdinalIgnoreCase);
             TerminalPhoneNoSessions = new ConcurrentDictionary<string, IJT808Session>(StringComparer.OrdinalIgnoreCase);
-            logger = loggerFactory.CreateLogger("JT808SessionManager");
+            logger = loggerFactory.CreateLogger<JT808SessionManager>();
         }
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="loggerFactory"></param>
         public JT808SessionManager(ILoggerFactory loggerFactory)
         {
             Sessions = new ConcurrentDictionary<string, IJT808Session>(StringComparer.OrdinalIgnoreCase);
             TerminalPhoneNoSessions = new ConcurrentDictionary<string, IJT808Session>(StringComparer.OrdinalIgnoreCase);
-            logger = loggerFactory.CreateLogger("JT808SessionManager");
+            logger = loggerFactory.CreateLogger<JT808SessionManager>();
         }
-
+        /// <summary>
+        /// 获取会话总数量
+        /// </summary>
         public int TotalSessionCount
         {
             get
@@ -46,7 +62,9 @@ namespace JT808.Gateway.Session
                 return Sessions.Count;
             }
         }
-
+        /// <summary>
+        /// 获取tcp会话数量
+        /// </summary>
         public int TcpSessionCount
         {
             get
@@ -54,7 +72,9 @@ namespace JT808.Gateway.Session
                 return Sessions.Where(w => w.Value.TransportProtocolType == JT808TransportProtocolType.tcp).Count();
             }
         }
-
+        /// <summary>
+        /// 获取udp会话数量
+        /// </summary>
         public int UdpSessionCount
         {
             get
@@ -62,7 +82,11 @@ namespace JT808.Gateway.Session
                 return Sessions.Where(w => w.Value.TransportProtocolType == JT808TransportProtocolType.udp).Count();
             }
         }
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="terminalPhoneNo"></param>
+        /// <param name="session"></param>
         internal void TryLink(string terminalPhoneNo, IJT808Session session)
         {
             DateTime curretDatetime= DateTime.Now;
@@ -74,7 +98,10 @@ namespace JT808.Gateway.Session
                     session.ActiveTime = curretDatetime;
                     TerminalPhoneNoSessions.TryUpdate(terminalPhoneNo, session, cacheSession);
                     //会话通知
-                    JT808SessionProducer?.ProduceAsync(JT808GatewayConstants.SessionOnline, terminalPhoneNo);
+                    if(SessionProducer != null)
+                    {
+                        SessionProducer.ProduceAsync(JT808GatewayConstants.SessionOnline, terminalPhoneNo);
+                    }
                 }
                 else
                 {
@@ -88,11 +115,20 @@ namespace JT808.Gateway.Session
                 if (TerminalPhoneNoSessions.TryAdd(terminalPhoneNo, session))
                 {
                     //会话通知
-                    JT808SessionProducer?.ProduceAsync(JT808GatewayConstants.SessionOnline, terminalPhoneNo);
+                    if (SessionProducer != null)
+                    {
+                        SessionProducer.ProduceAsync(JT808GatewayConstants.SessionOnline, terminalPhoneNo);
+                    }
                 }
             }
         }
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="terminalPhoneNo"></param>
+        /// <param name="socket"></param>
+        /// <param name="remoteEndPoint"></param>
+        /// <returns></returns>
         public IJT808Session TryLink(string terminalPhoneNo, Socket socket, EndPoint remoteEndPoint)
         {
             if (TerminalPhoneNoSessions.TryGetValue(terminalPhoneNo, out IJT808Session currentSession))
@@ -115,10 +151,17 @@ namespace JT808.Gateway.Session
             //部标的超长待机设备,不会像正常的设备一样一直连着，可能10几分钟连上了，然后发完就关闭连接，
             //这时候想下发数据需要知道设备什么时候上线，在这边做通知最好不过了。
             //有设备关联上来可以进行通知 例如：使用Redis发布订阅
-            JT808SessionProducer?.ProduceAsync(JT808GatewayConstants.SessionOnline, terminalPhoneNo);
+            if (SessionProducer != null)
+            {
+                SessionProducer.ProduceAsync(JT808GatewayConstants.SessionOnline, terminalPhoneNo);
+            }
             return currentSession;
         }
-
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="session"></param>
+        /// <returns></returns>
         internal bool TryAdd(IJT808Session session)
         {
             return Sessions.TryAdd(session.SessionID, session);
@@ -126,7 +169,7 @@ namespace JT808.Gateway.Session
 
         public async ValueTask<bool> TrySendByTerminalPhoneNoAsync(string terminalPhoneNo, byte[] data)
         {
-            if(TerminalPhoneNoSessions.TryGetValue(terminalPhoneNo,out var session))
+            if (TerminalPhoneNoSessions.TryGetValue(terminalPhoneNo, out var session))
             {
                 if (session.TransportProtocolType == JT808TransportProtocolType.tcp)
                 {
@@ -187,7 +230,10 @@ namespace JT808.Gateway.Session
                     removeSession.Close();
                     if (logger.IsEnabled(LogLevel.Information))
                         logger.LogInformation($"[Session Remove]:{terminalPhoneNo}-{tmpTerminalPhoneNo}");
-                    JT808SessionProducer?.ProduceAsync(JT808GatewayConstants.SessionOffline, tmpTerminalPhoneNo);
+                    if (SessionProducer != null)
+                    {
+                        SessionProducer.ProduceAsync(JT808GatewayConstants.SessionOffline, tmpTerminalPhoneNo);
+                    }
                 }
             }
         }
@@ -204,7 +250,10 @@ namespace JT808.Gateway.Session
                         TerminalPhoneNoSessions.TryRemove(item, out _);
                     }
                     var tmpTerminalPhoneNo = string.Join(",", terminalPhoneNos);
-                    JT808SessionProducer?.ProduceAsync(JT808GatewayConstants.SessionOffline, tmpTerminalPhoneNo);
+                    if (SessionProducer != null)
+                    {
+                       SessionProducer.ProduceAsync(JT808GatewayConstants.SessionOffline, tmpTerminalPhoneNo);
+                    }
                     if (logger.IsEnabled(LogLevel.Information))
                         logger.LogInformation($"[Session Remove]:{tmpTerminalPhoneNo}");
                 }

@@ -1,4 +1,4 @@
-﻿using JT808.Gateway.Configurations;
+﻿using JT808.Gateway.Abstractions.Configurations;
 using JT808.Gateway.Session;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -25,7 +25,7 @@ namespace JT808.Gateway.Services
             )
         {
             SessionManager = jT808SessionManager;
-            Logger = loggerFactory.CreateLogger("JT808TcpReceiveTimeout");
+            Logger = loggerFactory.CreateLogger<JT808TcpReceiveTimeoutHostedService>();
             Configuration = jT808ConfigurationAccessor.Value;
         }
 

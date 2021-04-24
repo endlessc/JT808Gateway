@@ -9,12 +9,12 @@ using NLog.Extensions.Logging;
 using JT808.Gateway.NormalHosting.Impl;
 using JT808.Gateway.MsgLogging;
 using JT808.Gateway.Transmit;
-using JT808.Gateway.Traffic;
 using JT808.Gateway.NormalHosting.Services;
 using JT808.Gateway.Abstractions;
 using JT808.Gateway.SessionNotice;
 using JT808.Gateway.Client;
 using JT808.Gateway.NormalHosting.Jobs;
+using JT808.Gateway.WebApiClientTool;
 
 namespace JT808.Gateway.NormalHosting
 {
@@ -44,30 +44,30 @@ namespace JT808.Gateway.NormalHosting
                     services.AddSingleton<JT808SessionService>();
                     services.AddSingleton<IJT808SessionProducer, JT808SessionProducer>();
                     services.AddSingleton<IJT808SessionConsumer, JT808SessionConsumer>();
+                    //使用内存队列实现应答生产消费
+                    services.AddSingleton<JT808MsgReplyDataService>();
+                    services.AddSingleton<IJT808MsgReplyProducer, JT808MsgReplyProducer>();
                     services.AddJT808Configure()
                             //添加客户端工具
                             .AddClient()
-                            //.AddNormalGateway(options =>
-                            ////{
-                            ////    options.TcpPort = 808;
-                            ////    options.UdpPort = 808;
-                            ////})                            
-                            .AddNormalGateway(hostContext.Configuration)
-                            .ReplaceNormalReplyMessageHandler<JT808NormalReplyMessageHandlerImpl>()
+                            .Builder()
+                            //方式1:客户端webapi调用
+                            .AddWebApiClientTool(hostContext.Configuration)
+                            .AddGateway(hostContext.Configuration)
+                            .AddMessageHandler<JT808CustomMessageHandlerImpl>()
+                            .AddMsgReplyConsumer<JT808MsgReplyConsumer>()
                             .AddMsgLogging<JT808MsgLogging>()
-                            .AddTraffic()
                             .AddSessionNotice()
                             .AddTransmit(hostContext.Configuration)
                             .AddTcp()
                             .AddUdp()
-                            .AddGrpc()
-                            ;
-                    //流量统计
-                    services.AddHostedService<TrafficJob>();
-                    //grpc客户端调用
-                    //services.AddHostedService<CallGrpcClientJob>();
+                            .AddHttp();
+                    //方式2:客户端webapi调用
+                    //services.AddJT808WebApiClientTool(hostContext.Configuration);
+                    //httpclient客户端调用
+                    //services.AddHostedService<CallHttpClientJob>();
                     //客户端测试  依赖AddClient()服务
-                    services.AddHostedService<UpJob>();
+                    //services.AddHostedService<UpJob>();
                 });
 
             await serverHostBuilder.RunConsoleAsync();
