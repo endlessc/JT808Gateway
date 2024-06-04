@@ -114,7 +114,7 @@ namespace JT808.Gateway
                             var pipe = new Pipe();
                             Task writing = FillPipeAsync(session, pipe.Writer);
                             Task reading = ReadPipeAsync(session, pipe.Reader);
-                            await Task.WhenAll(reading, writing);
+                            await Task.WhenAny(reading, writing);
                             SessionManager.RemoveBySessionId(session.SessionID);
                         }, jT808TcpSession);
                     }
@@ -245,7 +245,7 @@ namespace JT808.Gateway
                         }
                         catch (JT808Exception ex)
                         {
-                            Logger.LogError($"[HeaderDeserialize ErrorCode]:{ ex.ErrorCode},[ReaderBuffer]:{data?.ToHexString()},{session.Client.RemoteEndPoint},{session.TerminalPhoneNo}");
+                            Logger.LogError($"[HeaderDeserialize ErrorCode]:{ex.ErrorCode},[ReaderBuffer]:{data?.ToHexString()},{session.Client.RemoteEndPoint},{session.TerminalPhoneNo}");
                         }
                         totalConsumed += seqReader.Consumed - totalConsumed;
                         if (seqReader.End) break;

@@ -4,8 +4,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
-using System.Collections.Generic;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -37,9 +35,17 @@ namespace JT808.Gateway.Services
                 {
                     foreach (var item in SessionManager.GetTcpAll())
                     {
-                        if (item.ActiveTime.AddSeconds(Configuration.TcpReaderIdleTimeSeconds) < DateTime.Now)
+                        try
                         {
-                            item.ReceiveTimeout.Cancel();
+                            if (item.ActiveTime.AddSeconds(Configuration.TcpReaderIdleTimeSeconds) < DateTime.Now)
+                            {
+                                item.ReceiveTimeout.Cancel();
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Logger.LogError(e, "Check whether the session with id {id} and sim number {terminal} has timed out and failed.", item.SessionID, item.TerminalPhoneNo);
+                            continue;
                         }
                     }
                     Logger.LogInformation($"[Check Receive Timeout]");
