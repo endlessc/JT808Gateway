@@ -1,7 +1,5 @@
 ﻿using JT808.Protocol;
 using JT808.Gateway.Kafka;
-using JT808.Gateway.ReplyMessage;
-using JT808.Gateway.SessionNotice;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -9,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Threading.Tasks;
 using JT808.Gateway.SimpleQueueService.Impl;
+using JT808.Gateway.Extensions;
 
 namespace JT808.Gateway.SimpleQueueService
 {
@@ -33,8 +32,7 @@ namespace JT808.Gateway.SimpleQueueService
                             .AddMsgConsumer(hostContext.Configuration)
                             .AddMsgReplyProducer(hostContext.Configuration)
                             .AddSessionConsumer(hostContext.Configuration)
-                            //todo:JT808QueueReplyMessageHandlerImpl
-                            //.AddReplyMessage<JT808QueueReplyMessageHandlerImpl>()
+                            .AddReplyMessage<JT808QueueReplyMessageHandlerImpl>()
                             .AddSessionNotice<JT808SessionNoticeServiceImpl>();
                 });
 

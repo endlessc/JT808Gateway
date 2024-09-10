@@ -44,7 +44,7 @@ namespace JT808.Gateway.CleintBenchmark.Services
             ThreadPool.GetMaxThreads(out var maxWorkerThreads, out var maxCompletionPortThreads);
             logger.LogInformation($"GetMinThreads:{minWorkerThreads}-{minCompletionPortThreads}");
             logger.LogInformation($"GetMaxThreads:{maxWorkerThreads}-{maxCompletionPortThreads}");
-            taskFactory = new TaskFactory(cancellationToken);
+            taskFactory = new TaskFactory(cancellationToken, TaskCreationOptions.PreferFairness, TaskContinuationOptions.PreferFairness, TaskScheduler.Default);
             Task.Run(() => {
                 for (int i = 0; i < clientBenchmarkOptions.DeviceCount; i++)
                 {
@@ -63,7 +63,7 @@ namespace JT808.Gateway.CleintBenchmark.Services
                                 int Lng = new Random(1000).Next(100000, 180000);
                                 if (client != null)
                                 {
-                                    await client.SendAsync(JT808MsgId.位置信息汇报.Create(client.DeviceConfig.TerminalPhoneNo, new JT808_0x0200()
+                                    await client.SendAsync(JT808MsgId._0x0200.Create(client.DeviceConfig.TerminalPhoneNo, new JT808_0x0200()
                                     {
                                         Lat = lat,
                                         Lng = Lng,
@@ -80,10 +80,9 @@ namespace JT808.Gateway.CleintBenchmark.Services
                             {
                                 logger.LogError(ex.Message);
                             }
-                            await Task.Delay(clientBenchmarkOptions.Interval);
+                            await Task.Delay(TimeSpan.FromMilliseconds(clientBenchmarkOptions.Interval));
                         }
-                    }, i);
-                    Thread.Sleep(300);
+                    }, i,cancellationToken, TaskCreationOptions.PreferFairness, TaskScheduler.Default);
                 }
             });
             return Task.CompletedTask;

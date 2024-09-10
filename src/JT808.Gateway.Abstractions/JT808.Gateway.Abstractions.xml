@@ -85,6 +85,11 @@
             远程ip地址
             </summary>
         </member>
+        <member name="P:JT808.Gateway.Abstractions.Dtos.JT808TerminalPhoneNoDto.TerminalPhoneNo">
+            <summary>
+            终端手机号
+            </summary>
+        </member>
         <member name="P:JT808.Gateway.Abstractions.Dtos.JT808UdpSessionInfoDto.LastActiveTime">
             <summary>
             最后上线时间
@@ -108,6 +113,16 @@
         <member name="T:JT808.Gateway.Abstractions.Dtos.JT808UnificationSendRequestDto">
             <summary>
             统一下发请求参数
+            </summary>
+        </member>
+        <member name="F:JT808.Gateway.Abstractions.Enums.JT808MsgLoggingType.up">
+            <summary>
+            数据上行
+            </summary>
+        </member>
+        <member name="F:JT808.Gateway.Abstractions.Enums.JT808MsgLoggingType.down">
+            <summary>
+            数据下行
             </summary>
         </member>
         <member name="T:JT808.Gateway.Abstractions.Enums.JT808TransportProtocolType">
@@ -156,6 +171,11 @@
             <param name="TerminalNo">sim</param>
             <param name="Data">808 hex</param>
             <returns>应答消息数据</returns>
+        </member>
+        <member name="T:JT808.Gateway.Abstractions.IJT808MsgLogging">
+            <summary>
+            808数据上下行日志接口
+            </summary>
         </member>
         <member name="M:JT808.Gateway.Abstractions.IJT808MsgProducer.ProduceAsync(System.String,System.Byte[])">
             <summary>
@@ -217,6 +237,11 @@
             基于Tcp的会话服务集合
             </summary>
         </member>
+        <member name="F:JT808.Gateway.Abstractions.JT808GatewayConstants.JT808WebApiRouteTable.SessionTcpByPage">
+            <summary>
+            基于Tcp的会话服务集合
+            </summary>
+        </member>
         <member name="F:JT808.Gateway.Abstractions.JT808GatewayConstants.JT808WebApiRouteTable.SessionRemoveByTerminalPhoneNo">
             <summary>
             会话服务-通过设备终端号移除对应会话
@@ -233,6 +258,11 @@
             </summary>
         </member>
         <member name="F:JT808.Gateway.Abstractions.JT808GatewayConstants.JT808WebApiRouteTable.SessionUdpGetAll">
+            <summary>
+            基于Udp的虚拟会话服务集合
+            </summary>
+        </member>
+        <member name="F:JT808.Gateway.Abstractions.JT808GatewayConstants.JT808WebApiRouteTable.SessionUdpByPage">
             <summary>
             基于Udp的虚拟会话服务集合
             </summary>
@@ -458,11 +488,6 @@
             </summary>
             <param name="request"></param>
             <returns></returns>
-        </member>
-        <member name="M:JT808.Gateway.Abstractions.JT808MsgIdHttpHandlerBase.#ctor">
-            <summary>
-            初始化消息处理业务
-            </summary>
         </member>
     </members>
 </doc>

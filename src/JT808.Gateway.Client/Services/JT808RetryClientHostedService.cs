@@ -35,38 +35,46 @@ namespace JT808.Gateway.Client.Services
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            Task.Run(async()=> {
-                foreach (var item in RetryBlockingCollection.RetryBlockingCollection.GetConsumingEnumerable(cancellationToken))
+            new Thread(async () =>
+            {
+                try
                 {
-                    try
+                    foreach (var item in RetryBlockingCollection.RetryBlockingCollection.GetConsumingEnumerable(cancellationToken))
                     {
-                        jT808TcpClientFactory.Remove(item);
-                        if (item.AutoReconnection)
+                        try
                         {
-                            var result = await jT808TcpClientFactory.Create(item, cancellationToken);
-                            if (result != null)
+                            jT808TcpClientFactory.Remove(item);
+                            if (item.AutoReconnection)
                             {
-                                if (logger.IsEnabled(LogLevel.Information))
+                                var result = await jT808TcpClientFactory.Create(item, cancellationToken);
+                                if (result != null)
                                 {
-                                    logger.LogInformation($"Retry Success-{JsonSerializer.Serialize(item)}");
+                                    if (logger.IsEnabled(LogLevel.Information))
+                                    {
+                                        logger.LogInformation($"Retry Success-{JsonSerializer.Serialize(item)}");
+                                    }
                                 }
-                            }
-                            else
-                            {
-                                if (logger.IsEnabled(LogLevel.Warning))
+                                else
                                 {
-                                    logger.LogWarning($"Retry Fail-{JsonSerializer.Serialize(item)}");
+                                    if (logger.IsEnabled(LogLevel.Warning))
+                                    {
+                                        logger.LogWarning($"Retry Fail-{JsonSerializer.Serialize(item)}");
+                                    }
                                 }
                             }
                         }
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, $"Retry Error-{JsonSerializer.Serialize(item)}");
-                        await Task.Delay(TimeSpan.FromSeconds(5));
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, $"Retry Error-{JsonSerializer.Serialize(item)}");
+                            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+                        }
                     }
                 }
-            }, cancellationToken);
+                catch (Exception)
+                {
+
+                }
+            }).Start();
             return Task.CompletedTask;
         }
 

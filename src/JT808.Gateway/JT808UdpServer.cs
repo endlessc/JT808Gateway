@@ -62,7 +62,7 @@ namespace JT808.Gateway
         public Task StartAsync(CancellationToken cancellationToken)
         {
             Logger.LogInformation($"JT808 Udp Server start at {IPAddress.Any}:{ConfigurationMonitor.CurrentValue.UdpPort}.");
-            Task.Run(async() => {
+            Task.Run(async () => { 
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     var buffer = ArrayPool<byte>.Shared.Rent(ConfigurationMonitor.CurrentValue.MiniNumBufferSize);
@@ -80,25 +80,27 @@ namespace JT808.Gateway
                     {
                         Logger.LogError(ex, "Receive MessageFrom Async");
                     }
-#pragma warning disable CA1031 // Do not catch general exception types
+                    catch (SocketException ex)
+                    {
+                        //Logger.LogWarning(ex, $"Socket Error");
+                    }
                     catch (Exception ex)
                     {
-                        Logger.LogError(ex, $"Received Bytes");
+                        Logger.LogError(ex, $"Service Error");
                     }
-#pragma warning restore CA1031 // Do not catch general exception types
                     finally
                     {
                         ArrayPool<byte>.Shared.Return(buffer);
                     }
                 }
-            }, cancellationToken);
+            });
             return Task.CompletedTask;
         }
         private void ReaderBuffer(ReadOnlySpan<byte> buffer, Socket socket,SocketReceiveMessageFromResult receiveMessageFromResult)
         {
             try
             {
-                var package = Serializer.HeaderDeserialize(buffer, minBufferSize: 10240);
+                var package = Serializer.HeaderDeserialize(buffer, minBufferSize: ConfigurationMonitor.CurrentValue.MiniNumBufferSize);
                 if (Logger.IsEnabled(LogLevel.Trace)) Logger.LogTrace($"[Accept Hex {receiveMessageFromResult.RemoteEndPoint}]:{package.OriginalData.ToHexString()}");
                 var session = SessionManager.TryLink(package.Header.TerminalPhoneNo, socket, receiveMessageFromResult.RemoteEndPoint);
                 if (Logger.IsEnabled(LogLevel.Information))
@@ -115,12 +117,10 @@ namespace JT808.Gateway
             {
                 Logger.LogError($"[HeaderDeserialize ErrorCode]:{ ex.ErrorCode},[ReaderBuffer]:{buffer.ToArray().ToHexString()}");
             }
-#pragma warning disable CA1031 // Do not catch general exception types
             catch (Exception ex)
             {
                 Logger.LogError(ex, $"[ReaderBuffer]:{ buffer.ToArray().ToHexString()}");
             }
-#pragma warning restore CA1031 // Do not catch general exception types
         }
 
         private void Processor(in IJT808Session session, in JT808HeaderPackage package)

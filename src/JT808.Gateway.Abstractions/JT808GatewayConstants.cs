@@ -20,7 +20,11 @@
             /// <summary>
             /// 基于Tcp的会话服务集合
             /// </summary>
-            public static string SessionTcpGetAll = $"{RouteTablePrefix}/{TcpPrefix}/{SessionPrefix}/GetAll";
+            public static string SessionTcpGetAll = $"{RouteTablePrefix}/{TcpPrefix}/{SessionPrefix}/GetAll";            
+            /// <summary>
+            /// 基于Tcp的会话服务集合
+            /// </summary>
+            public static string SessionTcpByPage = $"{RouteTablePrefix}/{TcpPrefix}/{SessionPrefix}/SessionTcpByPage";
             /// <summary>
             /// 会话服务-通过设备终端号移除对应会话
             /// </summary>
@@ -28,7 +32,7 @@
             /// <summary>
             /// 会话服务-通过设备终端号查询对应会话
             /// </summary>
-            public static string QueryTcpSessionByTerminalPhoneNo = $"{RouteTablePrefix}/{TcpPrefix}/{SessionPrefix}/QueryTcpSessionByTerminalPhoneNo";
+            public static string QueryTcpSessionByTerminalPhoneNo = $"{RouteTablePrefix}/{TcpPrefix}/{SessionPrefix}/QuerySessionByTerminalPhoneNo";
             /// <summary>
             /// 统一下发信息
             /// </summary>
@@ -36,15 +40,19 @@
             /// <summary>
             /// 基于Udp的虚拟会话服务集合
             /// </summary>
-            public static string SessionUdpGetAll = $"{RouteTablePrefix}/{UdpPrefix}/{SessionPrefix}/GetAll";
+            public static string SessionUdpGetAll = $"{RouteTablePrefix}/{UdpPrefix}/{SessionPrefix}/GetAll";            
+            /// <summary>
+            /// 基于Udp的虚拟会话服务集合
+            /// </summary>
+            public static string SessionUdpByPage = $"{RouteTablePrefix}/{UdpPrefix}/{SessionPrefix}/SessionUdpByPage";
             /// <summary>
             /// 会话服务-通过设备终端号移除对应会话
             /// </summary>
-            public static string RemoveUdpByTerminalPhoneNo = $"{RouteTablePrefix}/{UdpPrefix}/{SessionPrefix}/RemoveUdpByTerminalPhoneNo";
+            public static string RemoveUdpByTerminalPhoneNo = $"{RouteTablePrefix}/{UdpPrefix}/{SessionPrefix}/RemoveByTerminalPhoneNo";
             /// <summary>
             /// 会话服务-通过设备终端号查询对应会话
             /// </summary>
-            public static string QueryUdpSessionByTerminalPhoneNo = $"{RouteTablePrefix}/{UdpPrefix}/{SessionPrefix}/QueryUdpSessionByTerminalPhoneNo";
+            public static string QueryUdpSessionByTerminalPhoneNo = $"{RouteTablePrefix}/{UdpPrefix}/{SessionPrefix}/QuerySessionByTerminalPhoneNo";
             /// <summary>
             /// 黑名单添加
             /// </summary>
@@ -56,7 +64,7 @@
             /// <summary>
             /// 黑名单查询
             /// </summary>
-            public static string BlacklistGet = $"{RouteTablePrefix}/Blacklist/Get";
+            public static string BlacklistGet = $"{RouteTablePrefix}/Blacklist/GetAll";
         }
     }
 }

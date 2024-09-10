@@ -1,0 +1,9 @@
+﻿<Project>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\JT808.Gateway.Abstractions\JT808.Gateway.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\JT808.Gateway\JT808.Gateway.csproj"/>
+    <ProjectReference Include="..\..\src\JT808.Gateway.Kafka\JT808.Gateway.Kafka.csproj"/>
+    <ProjectReference Include="..\..\src\JT808.Gateway.Client\JT808.Gateway.Client.csproj" />
+    <ProjectReference Include="..\..\src\JT808.Gateway.WebApiClientTool\JT808.Gateway.WebApiClientTool.csproj" />
+  </ItemGroup>
+</Project>
